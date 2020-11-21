@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 iced = "0.1"
+iced_native = "0.2.2"
+iced_wgpu = "0.2.3"

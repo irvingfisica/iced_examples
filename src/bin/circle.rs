@@ -74,8 +74,10 @@ impl<'a, Message> Into<Element<'a, Message, Renderer>> for Circle {
 
 }
 
+use circle::Circle;
 use iced::{
-    slider, Sandbox, Column, Align, Slider, Container, Element, Length, Settings
+    slider, Sandbox, Column, Align, Slider, Container, Element,
+    Length, Settings, Text
 };
 
 
@@ -121,6 +123,8 @@ impl Sandbox for Example {
             .spacing(20)
             .max_width(500)
             .align_items(Align::Center)
+            .push(Circle::new(self.radius))
+            .push(Text::new(format!("Radius: {}", self.radius.to_string())))
             .push(Slider::new(
                 &mut self.slider,
                 1.0..=100.0,
