@@ -12,3 +12,4 @@ async-std = { version = "1.0", features = ["unstable"] }
 iced_native = "0.2.2"
 iced_wgpu = "0.2.3"
 chrono = "0.4"
+rand = "0.7"
