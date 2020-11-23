@@ -11,6 +11,7 @@ use iced::{Application,
             Point,
             Vector,
             Subscription,
+            window,
         };
 
 use std::time::Instant;
@@ -38,9 +39,13 @@ impl Application for Lienzo {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
+
+        let pos_ini = Point::new(50.0,50.0);
+        let vec_ini = Vector::new(10.4,13.2);
+
         (
             Lienzo {
-                circulo: Circulo::new(50.0,50.0),
+                circulo: Circulo::new(pos_ini,vec_ini),
                 circle: Default::default(),
             },
             Command::none(),
@@ -55,7 +60,7 @@ impl Application for Lienzo {
 
         match message {
             Message::Tick(_instant) => {
-                self.circulo.center = self.circulo.center + Vector::new(2.0,2.0);
+                self.circulo.update();
                 self.circle.clear();
             }
         }
@@ -77,9 +82,6 @@ impl Application for Lienzo {
         Container::new(canvas)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(20)
-            .center_x()
-            .center_y()
             .into()
 
     }
@@ -89,16 +91,33 @@ impl Application for Lienzo {
 struct Circulo {
     radius: f32,
     center: Point,
+    velocity: Vector,
 }
 
 impl Circulo {
 
-    pub fn new(x: f32, y: f32) -> Circulo {
+    pub fn new(posicion: Point, velocidad: Vector) -> Circulo {
 
         Circulo {
-            center: Point::new(x,y),
+            center: posicion,
+            velocity: velocidad,
             radius: 10.0,
         }
+    }
+
+    pub fn update(&mut self) {
+
+        let (width, height) = window::Settings::default().size;
+
+        if self.center.x > width as f32 || self.center.x < 0.0 {
+            self.velocity.x = self.velocity.x * -1.0
+        }
+
+        if self.center.y > height as f32 || self.center.y < 0.0 {
+            self.velocity.y = self.velocity.y * -1.0
+        }
+
+        self.center = self.center + self.velocity;
     }
 
 }
