@@ -7,7 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-iced = { version = "0.1", features = ["canvas"] }
+iced = { version = "0.1", features = ["canvas", "async-std", "debug"] }
+async-std = { version = "1.0", features = ["unstable"] }
 iced_native = "0.2.2"
 iced_wgpu = "0.2.3"
 chrono = "0.4"
