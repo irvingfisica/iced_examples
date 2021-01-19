@@ -56,5 +56,5 @@ pub enum Message {
 }
 
 fn main() {
-    Counter::run(Settings::default())
+    Counter::run(Settings::default()).unwrap();
 }

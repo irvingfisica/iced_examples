@@ -1,16 +1,17 @@
 use iced::{Application,
             executor,
+            time,
             Command,
             Element,
             Canvas,
             Length,
             canvas,
             Color,
-            Container,
             Settings,
             Point,
             Vector,
             Subscription,
+            Rectangle,
             window,
         };
 
@@ -20,12 +21,12 @@ pub fn main() {
     Lienzo::run(Settings {
         antialiasing: true,
         ..Settings::default()
-    })
+    }).unwrap();
 }
 
 pub struct Lienzo {
     circulo: Circulo,
-    circle: canvas::layer::Cache<Circulo>
+    circle: canvas::Cache
 }
 
 #[derive(Debug,Clone,Copy)]
@@ -41,7 +42,7 @@ impl Application for Lienzo {
     fn new(_flags: ()) -> (Self, Command<Message>) {
 
         let pos_ini = Point::new(50.0,50.0);
-        let vec_ini = Vector::new(10.4,13.2);
+        let vec_ini = Vector::new(0.4,0.2);
 
         (
             Lienzo {
@@ -53,7 +54,7 @@ impl Application for Lienzo {
     }
 
     fn title(&self) -> String {
-        String::from("Círculo simple")
+        String::from("Círculo simple moviendose")
     }
 
     fn update(&mut self, message: Message) -> Command<Message> {
@@ -74,16 +75,10 @@ impl Application for Lienzo {
     }
 
     fn view(&mut self) -> Element<Message> {
-        let canvas = Canvas::new()
-            .width(Length::Units(400))
-            .height(Length::Units(400))
-            .push(self.circle.with(&self.circulo));
-
-        Container::new(canvas)
+        Canvas::new(self)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
-
     }
 }
 
@@ -122,51 +117,16 @@ impl Circulo {
 
 }
 
-impl canvas::Drawable for Circulo {
-    fn draw(&self, frame: &mut canvas::Frame) {
-        use canvas::Path;
+impl<Message> canvas::Program<Message> for Lienzo {
+    fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
 
-        let center = self.center;
-        let radius = self.radius;
+        let circle = self.circle.draw(bounds.size(), |frame| {
+            let cir = canvas::Path::circle(Point::new(self.circulo.center.x, self.circulo.center.y), self.circulo.radius);
 
-        let circ = Path::circle(center, radius);
-        frame.fill(&circ, Color::from_rgb8(0x12, 0x93, 0xD8));
+            frame.fill(&cir, Color::from_rgb8(0xF9, 0xD7, 0x1C));
+        });
+
+        vec![circle]
 
     }
-}
-
-mod time {
-    use iced::futures;
-    use std::time::Instant;
-
-    pub fn every(duration: std::time::Duration) -> iced::Subscription<Instant> {
-        iced::Subscription::from_recipe(Every(duration))
-    }
-
-    struct Every(std::time::Duration);
-
-    impl<H, I> iced_native::subscription::Recipe<H,I> for Every
-    where
-        H: std::hash::Hasher,
-    {
-        type Output = Instant;
-
-        fn hash(&self, state: &mut H) {
-            use std::hash::Hash;
-
-            std::any::TypeId::of::<Self>().hash(state);
-            self.0.hash(state);
-        }
-
-        fn stream(
-            self: Box<Self>,
-            _input: futures::stream::BoxStream<'static, I>,
-        ) -> futures::stream::BoxStream<'static, Self::Output> {
-            use futures::stream::StreamExt;
-
-            async_std::stream::interval(self.0)
-                .map(|_| Instant::now())
-                .boxed()
-        }
-    }
-}
+} 

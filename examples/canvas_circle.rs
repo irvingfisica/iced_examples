@@ -6,7 +6,7 @@ use iced::{Application,
             Length,
             canvas,
             Color,
-            Container,
+            Rectangle,
             Settings,
         };
 
@@ -14,17 +14,16 @@ pub fn main() {
     Lienzo::run(Settings {
         antialiasing: true,
         ..Settings::default()
-    })
+    }).unwrap();
 }
 
 pub struct Lienzo {
     circulo: Circulo,
-    circle: canvas::layer::Cache<Circulo>
+    circle: canvas::Cache,
 }
 
 #[derive(Debug,Clone,Copy)]
 pub enum Message {
-
 }
 
 impl Application for Lienzo {
@@ -36,7 +35,8 @@ impl Application for Lienzo {
         (
             Lienzo {
                 circulo: Circulo {radius: 50.0},
-                circle:Default::default()},
+                circle: Default::default(),
+            },
             Command::none(),
         )
     }
@@ -50,17 +50,9 @@ impl Application for Lienzo {
     }
 
     fn view(&mut self) -> Element<Message> {
-        let canvas = Canvas::new()
-            .width(Length::Units(400))
-            .height(Length::Units(400))
-            .push(self.circle.with(&self.circulo));
-
-        Container::new(canvas)
+        Canvas::new(self)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(20)
-            .center_x()
-            .center_y()
             .into()
 
     }
@@ -71,15 +63,16 @@ struct Circulo {
     radius: f32,
 }
 
-impl canvas::Drawable for Circulo {
-    fn draw(&self, frame: &mut canvas::Frame) {
-        use canvas::Path;
+impl<Message> canvas::Program<Message> for Lienzo {
+    fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
 
-        let center = frame.center();
-        let radius = self.radius;
+        let circle = self.circle.draw(bounds.size(), |frame| {
+            let cir = canvas::Path::circle(frame.center(), self.circulo.radius);
 
-        let circ = Path::circle(center, radius);
-        frame.fill(&circ, Color::from_rgb8(0x12, 0x93, 0xD8));
+            frame.fill(&cir, Color::from_rgb8(0xF9, 0xD7, 0x1C));
+        });
+
+        vec![circle]
 
     }
-}
+} 

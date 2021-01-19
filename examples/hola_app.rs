@@ -1,13 +1,13 @@
 use iced::{Application, executor, Command, Element, Text, Settings};
 
 pub fn main() {
-    Hello::run(Settings::default())
+    Hello::run(Settings::default()).unwrap();
 }
 
 struct Hello;
 
 impl Application for Hello {
-    type Executor = executor::Null;
+    type Executor = executor::Default;
     type Message = ();
     type Flags = ();
 

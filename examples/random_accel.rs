@@ -2,14 +2,15 @@ use rand::prelude::*;
 
 use iced::{Application,
             executor,
+            time,
             Command,
             Element,
             Canvas,
             Length,
             canvas,
             Color,
-            Container,
             Settings,
+            Rectangle,
             Point,
             Vector,
             Subscription,
@@ -22,12 +23,12 @@ pub fn main() {
     Lienzo::run(Settings {
         antialiasing: true,
         ..Settings::default()
-    })
+    }).unwrap();
 }
 
 pub struct Lienzo {
     circulo: Circulo,
-    circle: canvas::layer::Cache<Circulo>
+    circle: canvas::Cache
 }
 
 #[derive(Debug,Clone,Copy)]
@@ -80,14 +81,7 @@ impl Application for Lienzo {
 
     fn view(&mut self) -> Element<Message> {
 
-        let (width, height) = window::Settings::default().size;
-        
-        let canvas = Canvas::new()
-            .width(Length::Units(width as u16))
-            .height(Length::Units(height as u16))
-            .push(self.circle.with(&self.circulo));
-
-        Container::new(canvas)
+        Canvas::new(self)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
@@ -121,9 +115,9 @@ impl Circulo {
 
         self.check_edges();
 
-        let acc_x: f32 = rng.gen_range(-1.0,1.0);
-        let temp_y: f32 = rng.gen_range(-1.0,1.0);
-        let acc_y: f32 = (1.0 - acc_x.powi(2)).sqrt() * temp_y.signum();
+        let acc_x: f32 = rng.gen_range(-0.01..0.01);
+        let temp_y: f32 = rng.gen_range(-0.01..0.01);
+        let acc_y: f32 = (0.01 - acc_x.powi(2)).sqrt() * temp_y.signum();
 
         self.accel = Vector::new(acc_x,acc_y);
         self.velocity = self.velocity + self.accel;
@@ -146,51 +140,16 @@ impl Circulo {
 
 }
 
-impl canvas::Drawable for Circulo {
-    fn draw(&self, frame: &mut canvas::Frame) {
-        use canvas::Path;
+impl<Message> canvas::Program<Message> for Lienzo {
+    fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
 
-        let center = self.center;
-        let radius = self.radius;
+        let circle = self.circle.draw(bounds.size(), |frame| {
+            let cir = canvas::Path::circle(Point::new(self.circulo.center.x, self.circulo.center.y), self.circulo.radius);
 
-        let circ = Path::circle(center, radius);
-        frame.fill(&circ, Color::from_rgb8(0x12, 0x93, 0xD8));
+            frame.fill(&cir, Color::from_rgb8(0xF9, 0xD7, 0x1C));
+        });
+
+        vec![circle]
 
     }
-}
-
-mod time {
-    use iced::futures;
-    use std::time::Instant;
-
-    pub fn every(duration: std::time::Duration) -> iced::Subscription<Instant> {
-        iced::Subscription::from_recipe(Every(duration))
-    }
-
-    struct Every(std::time::Duration);
-
-    impl<H, I> iced_native::subscription::Recipe<H,I> for Every
-    where
-        H: std::hash::Hasher,
-    {
-        type Output = Instant;
-
-        fn hash(&self, state: &mut H) {
-            use std::hash::Hash;
-
-            std::any::TypeId::of::<Self>().hash(state);
-            self.0.hash(state);
-        }
-
-        fn stream(
-            self: Box<Self>,
-            _input: futures::stream::BoxStream<'static, I>,
-        ) -> futures::stream::BoxStream<'static, Self::Output> {
-            use futures::stream::StreamExt;
-
-            async_std::stream::interval(self.0)
-                .map(|_| Instant::now())
-                .boxed()
-        }
-    }
-}
+} 

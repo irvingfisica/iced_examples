@@ -7,9 +7,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-iced = { version = "0.1", features = ["canvas", "async-std", "debug"] }
-async-std = { version = "1.0", features = ["unstable"] }
-iced_native = "0.2.2"
-iced_wgpu = "0.2.3"
-chrono = "0.4"
-rand = "0.7"
+iced = { version = "0.2", features = ["canvas", "tokio", "debug"] }
+iced_native = "0.3.0"
+iced_graphics = "0.1.0"
+iced_wgpu = "0.3.0"
+tokio = { version = "1.0", features = ["sync"]}
+itertools = "0.10"
+rustc-hash = "1.1"
+rand = "0.8"
