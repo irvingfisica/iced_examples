@@ -252,7 +252,7 @@ use iced::canvas::{
 
 Si compilamos y ejecutamos nuestro programa con `cargo run` en la terminal obtendremos una ventana con un `canvas` que dentro tiene un rectangulo que lo abarca todo y que es de color negro.
 
-![Ventana de aplicación vacía](./images/gol02.png)
+![Ventana de aplicación con canvas](./images/gol02.png)
 
 ## Dibujando celdas
 
@@ -339,7 +339,7 @@ impl<Message> canvas::Program<Message> for Grid {
 
 Las dos celdas nuevas que hemos agregado viven en el marco de referencia reescalado. En este marco de referencia una unidad equivale a 10 pixeles. El orígen se mantiene en la misma posición, la esquina superior izquierda de nuestro canvas. Los cuadros que dibujamos tienen longitud de una unidad, es decir, 10 pixeles. Además hemos colocado uno de ellos en coordenadas negativas para que se pueda apreciar que nuestros marcos de referencia no están limitados a la parte visible del canvas y que ningún error ocurre si usamos coordenadas fuera de esta parte visible.
 
-Actualizamos nuestro programa para indicar el uso de partes de Iced nuevas
+Actualizamos el ámbito de nuestro programa para indicar el uso de partes de Iced nuevas
 
 ~~~rust
 use iced::{
@@ -368,7 +368,7 @@ use iced::canvas::{
 
 Al compilar y ejecutar tendremos nuestra interfaz con fondo negro y 3 cuadros, 2 de ellos sobre el marco referencial escalado y uno de ellos sobre el marco referencial original, podemos identificarlos por los colores. Blanco y amarillo en el marco referencial reescalado y rojo en el marco referencial original. Los tres cuadros son del mismo tamaño, pero el blanco lo vemos más pequeñom porque 3 cuartas partes de el están fuera de la parte visible de nuestro canvas.
 
-![Ventana de aplicación vacía](./images/gol03.png)
+![Algunas celdas dibujadas](./images/gol03.png)
 
 ## Implementando las celdas activas
 
@@ -583,3 +583,133 @@ struct Grid {
 Después de compilar y ejecutar con `cargo run` deberías ver una ventana con un grid que contiene celulas activas en aquellos lugares en donde el esquema de la estructura predefinida estaba marcado con una "x"
 
 ![Glider Gun!](./images/gol04.png)
+
+## Centrando la estructura predefinida
+
+Usualmente la dinámica del juego de la vida se dirije hacia todos lados, de tal manera que iniciar nuestra estructura en la esquina no es lo más conveniente pues nos perderíamos toda la dinámica que viaja hacia la parte superior izquierda. Podemos desplazar el origen de nuestro frame aplicando otra transformación. En este caso será una traslación. Para ello necesitamos definir cual va a ser el nuevo orígen de nuestro marco de referencia y aplicar nuestra transformación.
+
+Agregando este par de cambios nuestra función `draw` queda de la siguiente manera
+
+~~~rust
+impl<Message> canvas::Program<Message> for Grid {
+
+    fn draw(&self, bounds: Rectangle, _cursor: Cursor) -> Vec<Geometry> {
+
+        //En esta línea definimos el nuevo orígen del frame
+        let center = Vector::new(bounds.width / 2.0, bounds.height / 2.0);
+
+        let grid = self.life_cache.draw(bounds.size(), |frame| {
+            let background = Path::rectangle(Point::ORIGIN, frame.size());
+
+            frame.fill(&background, Color::BLACK);
+
+            frame.with_save(|frame| {
+
+                //En esta linea aplicamos la transformación
+                frame.translate(center);
+                frame.scale(Cell::SIZE as f32);
+
+                for cell in &self.life.cells {
+
+                    frame.fill_rectangle(
+                        Point::new(cell.j as f32, cell.i as f32),
+                        Size::UNIT,
+                        Color::WHITE,
+                    )
+
+                }
+
+            });
+
+        });
+
+        vec![grid]
+
+    }
+}
+~~~
+
+Además necesitamos modificar la función `life` de la `enum Preset` para que las tuplas de coordenadas que regresa estén centradas en el origen y no desplazadas a la parte positiva, positiva del marco referencial. Para ello definiremos una columna y una fila iniciales que están desplazadas justo por la mitad de las dimensiones de nuestra estructura predefinida y le agregaremos estos valores a las coordenadas en la tupla.
+
+~~~rust
+impl Preset {
+    pub fn life(self) -> Vec<(isize, isize)> {
+
+        #[rustfmt::skip]
+        let cells = match self {
+            Preset::Glider => vec![
+                " x ",
+                "  x",
+                "xxx"
+            ],
+            Preset::GliderGun => vec![
+                "                        x           ",
+                "                      x x           ",
+                "            xx      xx            xx",
+                "           x   x    xx            xx",
+                "xx        x     x   xx              ",
+                "xx        x   x xx    x x           ",
+                "          x     x       x           ",
+                "           x   x                    ",
+                "            xx                      ",
+            ],
+        };
+
+        //Calculamos la fila inicial
+        let start_row = -(cells.len() as isize / 2);
+
+        cells
+            .into_iter()
+            .enumerate()
+            .flat_map(|(i, cells)| {
+
+                //Calculamos la columna inicial
+                let start_column = -(cells.len() as isize / 2);
+
+                cells
+                    .chars()
+                    .enumerate()
+                    .filter(|(_, c)| !c.is_whitespace())
+                    .map(move |(j, _)| {
+                        //Agregamos los valores a las coordenadas
+                        (start_row + i as isize, start_column + j as isize)
+                    })
+            }).collect()
+    }
+}
+~~~
+
+Además necesitamos agregar al ámbito de nuestra aplicación el uso de `Vector`
+
+~~~rust
+use std::collections::HashSet;
+use iced::{
+    Application, 
+    executor, 
+    Command, 
+    Element, 
+    Container,
+    Length,
+    Column,
+    Settings,
+    Rectangle,
+    Point,
+    Color,
+    Size,
+    Vector,
+    };
+use iced::canvas::{
+    self,
+    Cache,
+    Canvas,
+    Cursor,
+    Geometry,
+    Path,
+};
+~~~
+
+Compilando y ejecutando tendremos nuestra ventana con la estructura predefinida bien centrada
+
+![Estructura predeterminada centrada](./images/gol05.png)
+
+## Dinámica del juego de la vida

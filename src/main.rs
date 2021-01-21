@@ -12,6 +12,7 @@ use iced::{
     Point,
     Color,
     Size,
+    Vector,
     };
 use iced::canvas::{
     self,
@@ -89,6 +90,8 @@ impl<Message> canvas::Program<Message> for Grid {
 
     fn draw(&self, bounds: Rectangle, _cursor: Cursor) -> Vec<Geometry> {
 
+        let center = Vector::new(bounds.width / 2.0, bounds.height / 2.0);
+
         let grid = self.life_cache.draw(bounds.size(), |frame| {
             let background = Path::rectangle(Point::ORIGIN, frame.size());
 
@@ -96,6 +99,7 @@ impl<Message> canvas::Program<Message> for Grid {
 
             frame.with_save(|frame| {
 
+                frame.translate(center);
                 frame.scale(Cell::SIZE as f32);
 
                 for cell in &self.life.cells {
@@ -187,16 +191,20 @@ impl Preset {
             ],
         };
 
+        let start_row = -(cells.len() as isize / 2);
+
         cells
             .into_iter()
             .enumerate()
             .flat_map(|(i, cells)| {
+                let start_column = -(cells.len() as isize / 2);
+
                 cells
                     .chars()
                     .enumerate()
                     .filter(|(_, c)| !c.is_whitespace())
                     .map(move |(j, _)| {
-                        (i as isize, j as isize)
+                        (start_row + i as isize, start_column + j as isize)
                     })
             }).collect()
     }
