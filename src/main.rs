@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet,HashMap};
 use iced::{
     Application, 
     executor, 
@@ -13,6 +13,8 @@ use iced::{
     Color,
     Size,
     Vector,
+    Subscription,
+    time,
     };
 use iced::canvas::{
     self,
@@ -37,9 +39,9 @@ struct GameOfLife {
     grid: Grid,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum Message {
-
+    Tick,
 }
 
 impl Application for GameOfLife {
@@ -60,9 +62,22 @@ impl Application for GameOfLife {
         String::from("Game of Life - Iced")
     }
 
-    fn update(&mut self, _message: Message) -> Command<Message> {
+    fn update(&mut self, message: Message) -> Command<Message> {
+
+        match message {
+            Message::Tick => {
+                self.grid.update();
+            }
+        }
 
         Command::none()
+    }
+
+    fn subscription(&self) -> Subscription<Message>{
+        time::every(std::time::Duration::from_millis(50))
+            .map(|_instant| {
+                Message::Tick
+             } )
     }
 
     fn view(&mut self) -> Element<Message> {
@@ -131,6 +146,11 @@ impl Grid {
             life_cache: Cache::default(),
         }
     }
+
+    pub fn update(&mut self) {
+        self.life.tick();
+        self.life_cache.clear();
+    }
 }
 
 impl Default for Grid {
@@ -144,6 +164,34 @@ struct Life {
     cells: HashSet<Cell>
 }
 
+impl Life {
+    fn tick(&mut self) {
+        let mut adjacent_life: HashMap<Cell,usize> = HashMap::default();
+
+        for cell in &self.cells {
+            adjacent_life.entry(*cell).or_insert(0);
+
+            for neighbour in Cell::neighbors(*cell) {
+                let amount = adjacent_life.entry(neighbour).or_insert(0);
+
+                *amount += 1;
+            }
+        }
+
+        for (cell, amount) in adjacent_life.iter() {
+            match amount {
+                2 => {},
+                3 => {
+                    self.cells.insert(*cell);
+                },
+                _ => {
+                    self.cells.remove(cell);
+                }
+            }
+        }
+    }
+}
+
 impl std::iter::FromIterator<Cell> for Life {
     fn from_iter<I: IntoIterator<Item = Cell>>(iter: I) -> Self {
         Life {
@@ -152,8 +200,7 @@ impl std::iter::FromIterator<Cell> for Life {
     }
 }
 
-// #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 struct Cell {
     i: isize,
     j: isize,
@@ -161,6 +208,19 @@ struct Cell {
 
 impl Cell {
     const SIZE: usize = 10;
+
+    fn cluster(cell: Cell) -> impl Iterator<Item = Cell> {
+        use itertools::Itertools;
+
+        let rows = cell.i.saturating_sub(1) ..= cell.i.saturating_add(1);
+        let columns = cell.j.saturating_sub(1) ..= cell.j.saturating_add(1);
+
+        rows.cartesian_product(columns).map(|(i,j)| Cell {i, j})
+    }
+
+    fn neighbors(cell: Cell) -> impl Iterator<Item = Cell> {
+        Cell::cluster(cell).filter(move |candidate| *candidate != cell)
+    }
 }
 
 enum Preset {

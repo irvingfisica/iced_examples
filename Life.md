@@ -55,7 +55,7 @@ Este trait tiene 3 `types` asociados:
 Crearemos una `enum` encargada de codificar los mensajes de nuestra aplicación, por el momento estará vacía
 
 ~~~rust
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum Message {
 
 }
@@ -713,3 +713,174 @@ Compilando y ejecutando tendremos nuestra ventana con la estructura predefinida 
 ![Estructura predeterminada centrada](./images/gol05.png)
 
 ## Dinámica del juego de la vida
+
+Hasta ahora hemos logrado pintar celdas vivas en nuestro canvas. Necesitamos implementar la evolución del juego de la vida. Esta evolución está determinada por las reglas:
+
+- Una célula muerta con exactamente 3 células vecinas vivas "nace" (el siguiente turno estará viva).
+- Una célula viva con 2 o 3 células vecinas vivas sigue viva, en cualquier otro caso muere (por "soledad" o "sobrepoblación").
+
+Ambas reglas dependen solamente de la vecindad de una celda, es decir, el estado de una celda solamente depende de el estado de sus vecinos. Definiremos dentro de la `struct Cell` métodos que permitirán saber cual es la vecindad de una celda. Definiremos dos métodos, uno que nos indicará las celdas que pertenecen al cluster de nuestra célula (ella más sus vecinas) y otro que filtrará a solamente aquellas celdas que sean vecinas. Ambas funciones regresarán iteradores sobre los conjuntos.
+
+~~~rust
+impl Cell {
+    const SIZE: usize = 10;
+
+    fn cluster(cell: Cell) -> impl Iterator<Item = Cell> {
+        use itertools::Itertools;
+
+        let rows = cell.i.saturating_sub(1) ..= cell.i.saturating_add(1);
+        let columns = cell.j.saturating_sub(1) ..= cell.j.saturating_add(1);
+
+        rows.cartesian_product(columns).map(|(i,j)| Cell {i, j})
+    }
+
+    fn neighbors(cell: Cell) -> impl Iterator<Item = Cell> {
+        Cell::cluster(cell).filter(move |candidate| *candidate != cell)
+    }
+}
+~~~
+
+Para que podamos mover a las celdas pertenecientes a la vecindad necesitamos que la `struct Cell` implemente los `traits` `Copy` y `Clone`, los cuales podemos derivar agregandolos a los `traits` que ya se están derivando
+
+~~~rust
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+struct Cell {
+    i: isize,
+    j: isize,
+}
+~~~
+
+Una vez que somos capaces de saber la vecindad de una celda entonces podemos implementar en la `struct Life` la evolución de las celdas. El juego de la vida evoluciona todas las celdas del grid al mismo tiempo, es decir, en un tiempo t todo el grid cambia de estado. Las únicas celdas que tienen la posibilidad de alterar su estado son aquellas que tienen vecinos, por lo cual tenemos que iterar sobre aquellas células vivas y sus vecindades. Para cada una de las celdas potenciales a cambiar contaremos el número de vecinos vivos con los que cuenta. Después, con el número de vecinos activos determinaremos si una célula cambia de estado o permanece inalterada.
+
+~~~rust
+impl Life {
+    fn tick(&mut self) {
+        let mut adjacent_life: HashMap<Cell,usize> = HashMap::default();
+
+        for cell in &self.cells {
+            adjacent_life.entry(*cell).or_insert(0);
+
+            for neighbour in Cell::neighbors(*cell) {
+                let amount = adjacent_life.entry(neighbour).or_insert(0);
+
+                *amount += 1;
+            }
+        }
+
+        for (cell, amount) in adjacent_life.iter() {
+            match amount {
+                2 => {},
+                3 => {
+                    self.cells.insert(*cell);
+                },
+                _ => {
+                    self.cells.remove(cell);
+                }
+            }
+        }
+    }
+}
+~~~
+
+Necesitamos agregar al ámbito de nuestra aplicación el uso de `HashMap`
+
+~~~rust
+use std::collections::{HashSet,HashMap};
+~~~
+
+La función `tick` cambia el `HashSet` de `Cell`s en el campo `cells` de la `struct Life` aplicando las reglas del juego de la vida una vez, es decir `tick` avanza la evolución de nuestro grid en una unidad temporal. Recordemos que la `struct Life` es solamente una parte de `Grid`, haremos una función que se encarga de actualizar a `Grid` durante una unidad temporal. En esa unidad temporal sucederán dos cosas, su `struct Life` ejecutará la función `tick` para avanzar una unidad en el tiempo y además el Cache en donde dibujamos las células  vivas existentes, `life_cache`, se limpiará para que la función draw pueda redibujarlo de nuevo en su momento.
+
+Agregamos al bloque `impl` de la `struct Grid` la siguiente función
+
+~~~rust
+pub fn update(&mut self) {
+        self.life.tick();
+        self.life_cache.clear();
+}
+~~~
+
+Con esto la dinámica del juego de la vida quedá implementada. Cada que `Grid` ejecute su función `update()` la dinámica avanzará en una unidad temporal.
+
+## Ciclo de tiempo de nuestra aplicación
+
+Para actualizar el estado de nuestra aplicación Iced utiliza los mensajes o `Messages`, cada que la aplicación recibe un mensaje la función `update` que implementamos como parte del `trait Application` se encarga de actualizar el estado de la aplicación de acuerdo al mensaje recibido. En nuestro caso implementaremos un mensaje que se ancarga de avanzar la dinámica de `struct Grid` en una unidad temporal.
+
+Primero agregaremos el tipo de mensaje `Tick` a nuestra `enum Message` 
+
+~~~rust
+#[derive(Debug)]
+enum Message {
+    Tick,
+}
+~~~
+
+Después haremos que nuestra función `update()` del `trait Application` avance la dinámica de nuestra `struct Grid` cada que reciba el mensaje `Tick`, es decir, cada que reciba el mensaje `Tick` ejecutará la función `update()` de la `struct Grid`
+
+~~~rust
+fn update(&mut self, message: Message) -> Command<Message> {
+
+        match message {
+            Message::Tick => {
+                self.grid.update();
+            }
+        }
+
+        Command::none()
+}
+~~~
+
+Ahora necesitamos hacer que de forma recurrente nuestra aplicación esté enviando mensajes de tipo `Tick` cada cierta cantidad de tiempo para que la evolución sea continua. Esto se puede lograr implementando el método `subscription()` en el `trait Application` con lo cual podemos generar una suscripción a eventos que se mantendrá viva mientras la aplicación esté corriendo. Los mensajes que produzca esta suscripción serán manejados por la función `update()` del mismo `trait`.
+
+En el bloque de código en el cual implementamos las funciones requeridas del `trait Application` agregamos la siguiente definición del método `suscription()`
+
+~~~rust
+fn subscription(&self) -> Subscription<Message>{
+        time::every(std::time::Duration::from_millis(50))
+            .map(|_instant| {
+                Message::Tick
+             } )
+}
+~~~
+
+Esta función se encargará de generar un `Message::Tick` cada 50 milisegundos. 
+
+Actualizamos el ámbito de nuestra aplicación con algunas definiciones que usamos
+
+~~~rust
+use std::collections::{HashSet,HashMap};
+use iced::{
+    Application, 
+    executor, 
+    Command, 
+    Element, 
+    Container,
+    Length,
+    Column,
+    Settings,
+    Rectangle,
+    Point,
+    Color,
+    Size,
+    Vector,
+    Subscription,
+    time,
+    };
+use iced::canvas::{
+    self,
+    Cache,
+    Canvas,
+    Cursor,
+    Geometry,
+    Path,
+};
+~~~
+
+La suscripción se encarga de enviar un mensaje de tipo `Tick` cada 50 milisegundos, el mensaje lo recibe la función `update()` que se encarga de avanzar el estado de la `struct Grid` en una unidad temporal y de borrar el cache en donde teníamos nuestras células vivas dibujadas. La función `view()` se encarga de volver a dibujar geometrías en el cache que acabamos de vaciar, esta vez con el nuevo conjunto de células vivas. El proceso se repite con cada uno de los mensajes generados.
+
+Al compilar y ejecutar obtenemos un juego de la vida que evoluciona!
+
+![Estructura predeterminada centrada](./images/gol02.gif)
+
+Hasta aquí hemos generado una aplicación del juego de la vida que funciona. El [ejemplo](https://github.com/hecrj/iced/tree/master/examples/game_of_life) en el repositorio original del crate Iced es más complejo pues involucra capacidades para controlar aspectos de nuestra aplicación como la velocidad. Además permite navegar por el grid y hacer zoom-in y zoom-out en el.
+
+Poco a poco iremos incluyendo esas capacidades extras en este tutorial, por ahora puedes encontrar el código completo de esta primera versión de nuestra aplicación [aquí](https://github.com/irvingfisica/iced_examples/blob/master/examples/life01.rs).
