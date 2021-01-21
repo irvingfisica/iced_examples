@@ -879,7 +879,7 @@ La suscripción se encarga de enviar un mensaje de tipo `Tick` cada 50 milisegun
 
 Al compilar y ejecutar obtenemos un juego de la vida que evoluciona!
 
-![Estructura predeterminada centrada](./images/gol02.gif)
+![Estructura predeterminada centrada](./images/gol01.gif)
 
 Hasta aquí hemos generado una aplicación del juego de la vida que funciona. El [ejemplo](https://github.com/hecrj/iced/tree/master/examples/game_of_life) en el repositorio original del crate Iced es más complejo pues involucra capacidades para controlar aspectos de nuestra aplicación como la velocidad. Además permite navegar por el grid y hacer zoom-in y zoom-out en el.
 
