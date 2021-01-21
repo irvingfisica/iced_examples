@@ -1,168 +1,210 @@
-use std::time::Instant;
+use std::collections::HashSet;
 use iced::{
-    canvas::{self, Cursor, Path, Stroke},
-    executor, time, window, Application, Canvas, Color, Command, Element,
-    Length, Point, Rectangle, Settings, Size, Subscription, Vector
+    Application, 
+    executor, 
+    Command, 
+    Element, 
+    Container,
+    Length,
+    Column,
+    Settings,
+    Rectangle,
+    Point,
+    Color,
+    Size,
+    };
+use iced::canvas::{
+    self,
+    Cache,
+    Canvas,
+    Cursor,
+    Geometry,
+    Path,
 };
 
 pub fn main() -> iced::Result {
 
-    SolarSystem::run(Settings {
+    GameOfLife::run(Settings {
         antialiasing: true,
         ..Settings::default()
     })
 
 }
 
-struct SolarSystem {
-    state: State,
+#[derive(Default)]
+struct GameOfLife {
+    grid: Grid,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Message {
-    Tick(Instant),
+
 }
 
-impl Application for SolarSystem {
-    type Executor = executor::Default;
+impl Application for GameOfLife {
     type Message = Message;
+    type Executor = executor::Default;
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
-        (SolarSystem {
-            state: State::new(),
-        },
-        Command::none())
+        (
+            Self {
+                ..Self::default()
+            },
+            Command::none()
+        )
     }
 
     fn title(&self) -> String {
-        String::from("Solar system - Iced")
+        String::from("Game of Life - Iced")
     }
 
-    fn update(&mut self, message: Message) -> Command<Message> {
-        match message {
-            Message::Tick(instant) => {
-                self.state.update(instant);
-            }
-        };
+    fn update(&mut self, _message: Message) -> Command<Message> {
 
         Command::none()
     }
 
-    fn subscription(&self) -> Subscription<Message> {
-        time::every(std::time::Duration::from_millis(10))
-            .map(|instant| Message::Tick(instant))
-    }
-
     fn view(&mut self) -> Element<Message> {
-        Canvas::new(&mut self.state)
+
+        let canvas: Element<Message> = Canvas::new(&mut self.grid)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .into();
+
+        let content = Column::new().push(canvas);
+
+        Container::new(content)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
     }
 }
 
-#[derive(Debug)]
-struct State {
-    space_cache: canvas::Cache,
-    system_cache: canvas::Cache,
-    now: Instant,
-    start: Instant,
-    stars: Vec<(Point, f32)>,
+struct Grid {
+    life_cache: Cache,
+    life: Life,
 }
 
-impl State {
+impl<Message> canvas::Program<Message> for Grid {
 
-    const SUN_RADIUS: f32 = 70.0;
-    const ORBIT_RADIUS: f32 = 150.0;
-    const EARTH_RADIUS: f32 = 12.0;
-    const MOON_RADIUS: f32 = 4.0;
-    const MOON_DISTANCE: f32 = 28.0;
-    
-    pub fn new() -> State {
-        let now = Instant::now();
-        let (width, height) = window::Settings::default().size;
+    fn draw(&self, bounds: Rectangle, _cursor: Cursor) -> Vec<Geometry> {
 
-        State {
-            space_cache: Default::default(),
-            system_cache: Default::default(),
-            now,
-            start: now,
-            stars: Self::generate_stars(width, height),
-        }
-    }
+        let grid = self.life_cache.draw(bounds.size(), |frame| {
+            let background = Path::rectangle(Point::ORIGIN, frame.size());
 
-    pub fn update(&mut self, now: Instant) {
-        self.now = now;
-        self.system_cache.clear();
-    }
+            frame.fill(&background, Color::BLACK);
 
-    fn generate_stars(width: u32, height: u32) -> Vec<(Point, f32)> {
-        use rand::Rng;
+            frame.with_save(|frame| {
 
-        let mut rng = rand::thread_rng();
+                frame.scale(Cell::SIZE as f32);
 
-        (0..100).map(|_| {
-            (Point::new(
-                rng.gen_range((-(width as f32) / 2.0)..(width as f32 / 2.0)),
-                rng.gen_range((-(height as f32) / 2.0)..(height as f32 / 2.0))
-            ),rng.gen_range(0.5..1.0))
-        }).collect()
-    }
-}
+                for cell in &self.life.cells {
 
-impl<Message> canvas::Program<Message> for State {
-    fn draw(&self, bounds: Rectangle, _cursor: Cursor) -> Vec<canvas::Geometry> {
-        use std::f32::consts::PI;
+                    frame.fill_rectangle(
+                        Point::new(cell.j as f32, cell.i as f32),
+                        Size::UNIT,
+                        Color::WHITE,
+                    )
 
-        let background = self.space_cache.draw(bounds.size(), |frame| {
-            let space = Path::rectangle(Point::new(0.0, 0.0), frame.size());
-
-            let stars = Path::new(|path| {
-                for (p, size) in &self.stars {
-                    path.rectangle(*p, Size::new(*size, *size));
                 }
+
             });
 
-            frame.fill(&space, Color::BLACK);
-            frame.translate(frame.center() - Point::ORIGIN);
-            frame.fill(&stars, Color::WHITE);
         });
 
-        let system = self.system_cache.draw(bounds.size(), |frame| {
-            let center = frame.center();
+        vec![grid]
 
-            let sun = Path::circle(center, Self::SUN_RADIUS);
-            let orbit = Path::circle(center, Self::ORBIT_RADIUS);
-
-            frame.fill(&sun, Color::from_rgb8(0xF9, 0xD7, 0x1C));
-            frame.stroke(&orbit, Stroke {width:1.0, color: Color::from_rgba8(0, 153, 255, 0.1), ..Stroke::default()});
-
-            let elapsed = self.now - self.start;
-            let rotation = (2.0 * PI / 60.0) * elapsed.as_secs() as f32 + (2.0 * PI / 60_000.0) * elapsed.subsec_millis() as f32;
-
-            frame.with_save(|frame2| {
-                frame2.translate(Vector::new(center.x, center.y));
-                frame2.rotate(rotation);
-                frame2.translate(Vector::new(Self::ORBIT_RADIUS, 0.0));
-
-                let earth = Path::circle(Point::ORIGIN, Self::EARTH_RADIUS);
-                let shadow = Path::rectangle(Point::new(0.0, -Self::EARTH_RADIUS), Size::new(Self::EARTH_RADIUS * 4.0, Self::EARTH_RADIUS * 2.0));
-
-                frame2.fill(&earth, Color::from_rgb8(0x6B, 0x93, 0xD6));
-
-                frame2.with_save(|frame3| {
-                    frame3.rotate(rotation * 10.0);
-                    frame3.translate(Vector::new(0.0, Self::MOON_DISTANCE));
-
-                    let moon = Path::circle(Point::ORIGIN, Self::MOON_RADIUS);
-                    frame3.fill(&moon, Color::WHITE);
-                });
-
-                frame2.fill(&shadow, Color {a: 0.7, ..Color::BLACK});
-            })
-        });
-
-        vec![background, system]
     }
 }
+
+impl Grid {
+    pub fn from_preset(preset: Preset) -> Self {
+        Self {
+            life: preset.life()
+                    .into_iter()
+                    .map(|(i,j)| Cell { i, j })
+                    .collect(),
+            life_cache: Cache::default(),
+        }
+    }
+}
+
+impl Default for Grid {
+    fn default() -> Self {
+        Self::from_preset(Preset::GliderGun)
+    }
+}
+
+#[derive(Default)]
+struct Life {
+    cells: HashSet<Cell>
+}
+
+impl std::iter::FromIterator<Cell> for Life {
+    fn from_iter<I: IntoIterator<Item = Cell>>(iter: I) -> Self {
+        Life {
+            cells: iter.into_iter().collect(),
+        }
+    }
+}
+
+// #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash)]
+struct Cell {
+    i: isize,
+    j: isize,
+}
+
+impl Cell {
+    const SIZE: usize = 10;
+}
+
+enum Preset {
+    Glider,
+    GliderGun,
+}
+
+impl Preset {
+    pub fn life(self) -> Vec<(isize, isize)> {
+
+        #[rustfmt::skip]
+        let cells = match self {
+            Preset::Glider => vec![
+                " x ",
+                "  x",
+                "xxx"
+            ],
+            Preset::GliderGun => vec![
+                "                        x           ",
+                "                      x x           ",
+                "            xx      xx            xx",
+                "           x   x    xx            xx",
+                "xx        x     x   xx              ",
+                "xx        x   x xx    x x           ",
+                "          x     x       x           ",
+                "           x   x                    ",
+                "            xx                      ",
+            ],
+        };
+
+        cells
+            .into_iter()
+            .enumerate()
+            .flat_map(|(i, cells)| {
+                cells
+                    .chars()
+                    .enumerate()
+                    .filter(|(_, c)| !c.is_whitespace())
+                    .map(move |(j, _)| {
+                        (i as isize, j as isize)
+                    })
+            }).collect()
+    }
+}
+
+impl Default for Preset {
+    fn default() -> Preset {
+        Preset::Glider
+    }
+}
+
